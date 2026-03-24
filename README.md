@@ -1,8 +1,26 @@
 # AmazingExperiences: Agent-Native Discovery & Booking
 
-AmazingExperiences is a reference implementation of the **WebMCP (Web Model Context Protocol)** standard. It demonstrates how to transform a web application from a collection of "scraped" pixels into a first-class participant in the AI agent economy.
+**[🚀 Live Demo](https://jack-e-hobbs.github.io/webmcp-experiences-platform/)**
 
-## From Brittle Scraping to Intentional Discovery
+This demo was built in order to trial the new **WebMCP (Web Model Context Protocol)** standard. 
+It provides a sandbox for how this new tech might be utilised, as well as provides an example of the ways that web analytics (in this case, Amplitude) can be applied to these agent interactions.
+
+---
+
+## 🤖 How to Interact (Agent-First)
+
+To experience the full agent-native functionality, you must use a browser equipped with WebMCP capabilities.
+
+1.  **Use Chrome Canary:** Download and install [Chrome Canary](https://www.google.com/chrome/canary/).
+2.  **Enable the MCP Flag:** Navigate to `chrome://flags/#web-mcp` and set it to **Enabled**.
+3.  **Install the Extension:** Install the [WebMCP Chrome Extension](https://github.com/GoogleChromeLabs/webmcp-tools) (needs a Gemini API key).
+4.  **Try a Prompt:** Open the [Live Demo](https://jack-e-hobbs.github.io/webmcp-experiences-platform/) and ask your agent side-panel: *"Find me a romantic picnic in Melbourne for next weekend."*
+
+---
+
+## Why WebMCP?
+
+A relatively new initiative, webMCP is being actively refined and enhanced by a working group. Progress can be followed here: https://github.com/webmachinelearning/webmcp.
 
 Most AI agents currently interact with the web by "reading" the DOM—guessing what buttons do based on visual heuristics. WebMCP provides a formal handshake where the website explicitly declares its capabilities to the browser.
 
@@ -17,40 +35,36 @@ Most AI agents currently interact with the web by "reading" the DOM—guessing w
 
 ## Technical Architecture
 
-This prototype implements WebMCP across three distinct layers, providing a comprehensive blueprint for agent integration:
+This demo implements WebMCP across three distinct layers:
 
 ### 1. Declarative Discovery (HTML)
-The search interface utilizes native WebMCP HTML attributes. By tagging form elements with `toolname` and `tooldescription`, the browser discovers application capabilities instantly as the HTML parses, requiring zero JavaScript execution for initial agent awareness.
+The search interface utilizes native WebMCP HTML attributes (`toolname` and `tooldescription`). The browser discovers application capabilities instantly as the HTML parses, requiring zero JavaScript execution for initial agent awareness.
 
 ### 2. Imperative Action (JavaScript)
-We register high-fidelity business logic tools via `navigator.modelContext.registerTool`. Each tool (e.g., `initiate_booking`, `search_experiences`) is backed by a strict JSON Schema contract, ensuring deterministic agent interaction and eliminating the brittle nature of DOM-based "simulated clicks."
+We register high-fidelity business logic tools via `navigator.modelContext.registerTool`. Each tool (e.g., `initiate_booking`, `search_experiences`) is backed by a strict JSON Schema contract, ensuring deterministic agent interaction.
 
 ### 3. State Awareness (Context Injection)
-Using `provideContext`, the application actively pushes its internal state to the browser assistant. This eliminates redundant "discovery" steps—when a user is on a product page, the agent already "sees" the active experience ID and description, enabling immediate, context-aware execution.
+Using `provideContext`, the application actively pushes its internal state to the browser assistant. When a user is on a product page, the agent already "sees" the active experience ID, enabling immediate, context-aware execution.
 
 ---
 
 ## Analytics & Attribution (Amplitude)
 
-A core focus of this project is measuring the **"Silent Agent"**—users who browse and interact via LLM sidecars rather than the traditional UI.
+A core focus of this project is measuring and distinguishing between pure humans users, and users who interact via LLM sidecars rather than the traditional UI.
 
-*   **Capabilities Tracking:** Every event is tagged with a `webmcp_enabled` global property, allowing us to segment our data into "Agent-Capable" vs. "Legacy" sessions.
-*   **Interaction Attribution:** We distinguish between `interaction_source: Human` and `interaction_source: AI Agent`, providing a side-by-side funnel analysis of how agents convert compared to humans.
-*   **Visual Auditing:** Amplitude Session Replay is active at a 100% sample rate to visually verify and debug how agents manipulate the UI state.
+*   **Capabilities Tracking:** Every event is tagged with a `webmcp_enabled` global property to segment "Agent-Capable" sessions.
+*   **Interaction Attribution:** Distinguishes between `interaction_source: Human` and `interaction_source: AI Agent` for side-by-side funnel analysis.
+*   **Visual Auditing:** Amplitude Session Replay is active at a 100% sample rate to verify how agents manipulate the UI state.
 
 ---
 
-## Live Interaction Guide
-
-To see the agent-native logic in action, point a WebMCP-capable browser (e.g., Chrome Canary with the `#web-mcp` flag) at the [hosted demo](https://jack-e-hobbs.github.io/webmcp-experiences-platform/).
+## 📚 Resources
+*   [**Demonstration Scenarios**](./docs/agent_journeys.md) - Verified interaction patterns and prompt sequences.
+*   [**Amplitude Tracking Plan**](./docs/amplitude_tracking_plan.md) - Data taxonomy for agentic attribution.
+*   [**WebMCP Tool Definitions**](./docs/webmcp-tools.jsonc) - Raw JSON schemas for the registered tools.
 
 ### Local Debugging
-If you are developing without a Canary browser, the app exposes its tool definitions to the global scope. You can inspect the intended logic by running:
+If you are developing without a Canary browser, the app exposes its tool definitions to the global scope. Inspect them via:
 ```javascript
 console.table(window.__webmcp_tools);
 ```
-
-## 📚 Resources
-*   [**Agent User Journeys**](./agent_journeys.md) - Detailed breakdown of the 5 demo scenarios and why they work.
-*   [**Amplitude Tracking Plan**](./amplitude_tracking_plan.md) - The technical data taxonomy for agentic attribution.
-*   [**WebMCP Tool Definitions**](./docs/webmcp-tools.jsonc) - The raw JSON schemas for the registered tools.
