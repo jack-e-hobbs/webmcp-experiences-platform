@@ -113,69 +113,17 @@ function AppContent() {
     console.log(`[Amplitude] ${eventName}`, { ...globalProps, ...properties });
   };
 
-  // WebMCP Context Provision: Sync page state to the Agent
-  useEffect(() => {
-    const modelContext = (navigator as any).modelContext;
-    if (modelContext && typeof modelContext.provideContext === 'function') {
-      const pathParts = location.pathname.split('/');
-      const isProductPage = pathParts.includes('product');
-      const isConfirmationPage = pathParts.includes('confirmation');
-      const productId = isProductPage ? pathParts[pathParts.length - 1] : null;
-      const experience = productId ? dynamicExperiences.find(e => e.id === productId) : null;
-
-      const pageContext = {
-        state: {
-          current_path: location.pathname,
-          active_experience_id: productId,
-          active_experience_name: experience?.name || null,
-          wishlist_count: wishlist.length,
-          last_booking: isConfirmationPage ? lastBooking : null,
-          webmcp_demo_session: true
-        }
-      };
-
-      try {
-        modelContext.provideContext(pageContext);
-      } catch (e) {
-        console.warn("WebMCP: Context Provision Failed", e);
-      }
-    }
-  }, [location.pathname, wishlist.length, dynamicExperiences, lastBooking]);
-
-  // Handle Session Initialization
-  useEffect(() => {
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
-      
-      const isPresent = !!(navigator as any).modelContext;
-      if (isPresent) {
-        console.log("%c WebMCP detected: navigator.modelContext is available.", "color: #97b89d; font-weight: bold;");
-      }
-    }
-  }, []);
-
-  const filteredExperiences = useMemo(() => {
-    return dynamicExperiences.filter(exp => {
-      const matchLocation = !filters.location || exp.location.toLowerCase().includes(filters.location.toLowerCase());
-      const matchPartySize = !filters.partySize || (exp.minPartySize <= filters.partySize && exp.maxPartySize >= filters.partySize);
-      const matchWishlist = !filters.onlyWishlist || wishlist.includes(exp.id);
-      
-      const matchDate = (() => {
-        if (!filters.startDate && !filters.endDate) return true;
-        const start = filters.startDate ? new Date(filters.startDate) : null;
-        const end = filters.endDate ? new Date(filters.endDate) : null;
-        
-        return exp.availability.some(d => {
-          const check = new Date(d);
-          if (start && check < start) return false;
-          if (end && check > end) return false;
-          return true;
-        });
-      })();
-
-      return matchLocation && matchPartySize && matchDate && matchWishlist;
-    });
-  }, [filters, dynamicExperiences, wishlist]);
+  const handleWishlistToggle = (id: string, isAgent: boolean = false, sourceOverride?: string) => {
+    const exp = dynamicExperiences.find(e => e.id === id);
+    if (!exp) return;
+    const isInWishlist = wishlist.includes(id);
+    const newWishlist = isInWishlist ? wishlist.filter(item => item !== id) : [...wishlist, id];
+    setWishlist(newWishlist);
+    const source = isAgent ? 'AI Agent' : (sourceOverride || 'Unknown');
+    const eventName = isInWishlist ? 'Experiences Item Removed from Wishlist' : 'Experiences Item Added to Wishlist';
+    if (isAgent) setAgentMessage(`${isInWishlist ? 'Removed' : 'Added'} ${exp.name} ${isInWishlist ? 'from' : 'to'} wishlist.`);
+    trackEvent(eventName, { wishlist_source: source, products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, isAgent);
+  };
 
   const searchExperiences = (newFilters: any, isAgent: boolean = false) => {
     setFilters(newFilters);
@@ -225,29 +173,6 @@ function AppContent() {
     navigate('/checkout');
   };
 
-  const handleProductPageInitiateBooking = (id: string, date: string, partySize: number) => {
-    initiateBooking(id, false, date, partySize);
-  };
-
-  const handleViewDetails = (id: string) => {
-    const exp = dynamicExperiences.find(e => e.id === id);
-    if (exp) {
-      trackEvent('Experiences Item Viewed', { products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, false);
-    }
-  };
-
-  const handleWishlistToggle = (id: string, isAgent: boolean = false, sourceOverride?: string) => {
-    const exp = dynamicExperiences.find(e => e.id === id);
-    if (!exp) return;
-    const isInWishlist = wishlist.includes(id);
-    const newWishlist = isInWishlist ? wishlist.filter(item => item !== id) : [...wishlist, id];
-    setWishlist(newWishlist);
-    const source = isAgent ? 'AI Agent' : (sourceOverride || 'Unknown');
-    const eventName = isInWishlist ? 'Experiences Item Removed from Wishlist' : 'Experiences Item Added to Wishlist';
-    if (isAgent) setAgentMessage(`${isInWishlist ? 'Removed' : 'Added'} ${exp.name} ${isInWishlist ? 'from' : 'to'} wishlist.`);
-    trackEvent(eventName, { wishlist_source: source, products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, isAgent);
-  };
-
   const handleBookingSubmit = (selectedDate: string) => {
     if (!bookingRequest) return;
     const { experience, partySize } = bookingRequest;
@@ -273,110 +198,204 @@ function AppContent() {
     navigate('/confirmation');
   };
 
+  const filteredExperiences = useMemo(() => {
+    return dynamicExperiences.filter(exp => {
+      const matchLocation = !filters.location || exp.location.toLowerCase().includes(filters.location.toLowerCase());
+      const matchPartySize = !filters.partySize || (exp.minPartySize <= filters.partySize && exp.maxPartySize >= filters.partySize);
+      const matchWishlist = !filters.onlyWishlist || wishlist.includes(exp.id);
+      
+      const matchDate = (() => {
+        if (!filters.startDate && !filters.endDate) return true;
+        const start = filters.startDate ? new Date(filters.startDate) : null;
+        const end = filters.endDate ? new Date(filters.endDate) : null;
+        
+        return exp.availability.some(d => {
+          const check = new Date(d);
+          if (start && check < start) return false;
+          if (end && check > end) return false;
+          return true;
+        });
+      })();
+
+      return matchLocation && matchPartySize && matchDate && matchWishlist;
+    });
+  }, [filters, dynamicExperiences, wishlist]);
+
+  // Define tools as a memoized object to satisfy ProvideContextParams
+  const webmcpTools = useMemo(() => [
+    {
+      name: "search_experiences",
+      description: "Search for experiences based on criteria. Returns matching experiences with their IDs.",
+      inputSchema: { 
+        type: "object", 
+        properties: { 
+          location: { type: "string" }, 
+          partySize: { type: "number" }, 
+          startDate: { type: "string", format: "date" }, 
+          endDate: { type: "string", format: "date" }, 
+          onlyWishlist: { type: "boolean" } 
+        } 
+      },
+      execute: async (params: any) => {
+        const matches = searchExperiences(params, true);
+        const results = matches.map(m => ({ id: m.id, name: m.name, location: m.location, price: m.price, keywords: m.keywords }));
+        return { content: [{ type: "text", text: `Found ${matches.length} matches: ${JSON.stringify(results)}` }] };
+      }
+    },
+    {
+      name: "get_wishlist",
+      description: "Retrieves items in the user's wishlist.",
+      inputSchema: { type: "object", properties: {} },
+      execute: async () => {
+        const items = dynamicExperiences.filter(e => wishlistRef.current.includes(e.id));
+        const enriched = items.map(i => ({ id: i.id, name: i.name, keywords: i.keywords }));
+        return { content: [{ type: "text", text: `Wishlist contains: ${JSON.stringify(enriched)}` }] };
+      }
+    },
+    {
+      name: "toggle_wishlist",
+      description: "Adds or removes an experience from the user's saved list.",
+      inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
+      execute: async (params: any) => {
+        handleWishlistToggle(params.experienceId, true);
+        return { content: [{ type: "text", text: "Wishlist updated." }] };
+      }
+    },
+    {
+      name: "get_availability",
+      description: "Gets available dates for a specific experience ID.",
+      inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
+      execute: async (params: any) => {
+        const exp = dynamicExperiences.find(e => e.id === params.experienceId);
+        if (exp) trackEvent('Experiences Availability Checked', { experience_id: params.experienceId, availability_returned: exp.availability }, true);
+        return { content: [{ type: "text", text: exp ? `Available dates: ${JSON.stringify(exp.availability)}` : "Experience not found." }] };
+      }
+    },
+    {
+      name: "get_experience_details",
+      description: "Gets full product details for a specific experience ID.",
+      inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
+      execute: async (params: any) => {
+        const exp = dynamicExperiences.find(e => e.id === params.experienceId);
+        if (exp) trackEvent('Experiences Item Viewed', { products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, true);
+        return { content: [{ type: "text", text: exp ? JSON.stringify(exp) : "Experience not found." }] };
+      }
+    },
+    {
+      name: "initiate_booking",
+      description: "Starts checkout process for an experience ID.",
+      inputSchema: { type: "object", properties: { experienceId: { type: "string" }, partySize: { type: "number" } }, required: ["experienceId"] },
+      execute: async (params: any) => {
+        initiateBooking(params.experienceId, true, undefined, params.partySize);
+        return { content: [{ type: "text", text: "Checkout page opened." }] };
+      }
+    },
+    {
+      name: "generate_calendar_url",
+      description: "Generates a pre-filled calendar link for the active booking.",
+      inputSchema: { 
+        type: "object", 
+        properties: { 
+          experienceId: { type: "string" }, 
+          date: { type: "string", format: "date" }, 
+          provider: { type: "string", enum: ["google", "outlook", "apple"] } 
+        }, 
+        required: ["provider"] 
+      },
+      execute: async (params: any) => {
+        const storageBooking = JSON.parse(localStorage.getItem('webmcp_last_booking') || 'null');
+        const booking = lastBookingRef.current || storageBooking;
+        const targetId = params.experienceId || booking?.experienceId;
+        const targetDate = params.date || booking?.date;
+        const targetStartTime = booking?.startTime || "10:00";
+        const targetEndTime = booking?.endTime || "14:00";
+        const targetDesc = booking?.description || "";
+        const targetLoc = booking?.location || "";
+        const exp = dynamicExperiences.find(e => e.id === targetId);
+        if (!exp || !targetDate) return { content: [{ type: "text", text: "I couldn't find your booking details." }] };
+        const title = encodeURIComponent(`AmazingExperiences: ${exp.name}`);
+        const dateOnly = targetDate.replace(/-/g, '');
+        const startT = targetStartTime.replace(':', '');
+        const endT = targetEndTime.replace(':', '');
+        let url = "";
+        if (params.provider === "google") {
+          url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateOnly}T${startT}00/${dateOnly}T${endT}00&details=${encodeURIComponent(targetDesc)}&location=${encodeURIComponent(targetLoc)}`;
+        } else if (params.provider === "outlook") {
+          url = `https://outlook.live.com/calendar/0/deeplink/compose?subject=${title}&startdt=${targetDate}T${targetStartTime}:00&enddt=${targetDate}T${targetEndTime}:00&body=${encodeURIComponent(targetDesc)}&location=${encodeURIComponent(targetLoc)}`;
+        } else {
+          url = `data:text/calendar;charset=utf-8,BEGIN:VCALENDAR%0AVERSION:2.0%0ABEGIN:VEVENT%0ASUMMARY:${title}%0ADTSTART:${dateOnly}T${startT}00%0ADTEND:${dateOnly}T${endT}00%0ALOCATION:${encodeURIComponent(targetLoc)}%0AEND:VEVENT%0AEND:VCALENDAR`;
+        }
+        return { content: [{ type: "text", text: `I've generated your ${params.provider} calendar link: ${url}` }] };
+      }
+    }
+  ], [dynamicExperiences]);
+
+  // WebMCP Context Provision: Sync page state to the Agent
   useEffect(() => {
     const modelContext = (navigator as any).modelContext;
-    const tools = [
-      {
-        name: "search_experiences",
-        description: "Search for experiences based on criteria. Returns matching experiences with their IDs.",
-        inputSchema: { type: "object", properties: { location: { type: "string" }, partySize: { type: "number" }, startDate: { type: "string", format: "date" }, endDate: { type: "string", format: "date" }, onlyWishlist: { type: "boolean" } } },
-        execute: async (params: any) => {
-          const matches = searchExperiences(params, true);
-          const results = matches.map(m => ({ id: m.id, name: m.name, location: m.location, price: m.price, keywords: m.keywords }));
-          return { content: [{ type: "text", text: `Found ${matches.length} matches: ${JSON.stringify(results)}` }] };
-        }
-      },
-      {
-        name: "get_wishlist",
-        description: "Retrieves items in the user's wishlist.",
-        inputSchema: { type: "object", properties: {} },
-        execute: async () => {
-          const items = dynamicExperiences.filter(e => wishlistRef.current.includes(e.id));
-          const enriched = items.map(i => ({ id: i.id, name: i.name, keywords: i.keywords }));
-          return { content: [{ type: "text", text: `Wishlist contains: ${JSON.stringify(enriched)}` }] };
-        }
-      },
-      {
-        name: "toggle_wishlist",
-        description: "Adds or removes an experience from the user's saved list.",
-        inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
-        execute: async (params: any) => {
-          handleWishlistToggle(params.experienceId, true);
-          return { content: [{ type: "text", text: "Wishlist updated." }] };
-        }
-      },
-      {
-        name: "get_availability",
-        description: "Gets available dates for a specific experience ID.",
-        inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
-        execute: async (params: any) => {
-          const exp = dynamicExperiences.find(e => e.id === params.experienceId);
-          if (exp) trackEvent('Experiences Availability Checked', { experience_id: params.experienceId, availability_returned: exp.availability }, true);
-          return { content: [{ type: "text", text: exp ? `Available dates: ${JSON.stringify(exp.availability)}` : "Experience not found." }] };
-        }
-      },
-      {
-        name: "get_experience_details",
-        description: "Gets full product details for a specific experience ID.",
-        inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
-        execute: async (params: any) => {
-          const exp = dynamicExperiences.find(e => e.id === params.experienceId);
-          if (exp) trackEvent('Experiences Item Viewed', { products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, true);
-          return { content: [{ type: "text", text: exp ? JSON.stringify(exp) : "Experience not found." }] };
-        }
-      },
-      {
-        name: "initiate_booking",
-        description: "Starts checkout process for an experience ID.",
-        inputSchema: { type: "object", properties: { experienceId: { type: "string" }, partySize: { type: "number" } }, required: ["experienceId"] },
-        execute: async (params: any) => {
-          initiateBooking(params.experienceId, true, undefined, params.partySize);
-          return { content: [{ type: "text", text: "Checkout page opened." }] };
-        }
-      },
-      {
-        name: "generate_calendar_url",
-        description: "Generates a pre-filled calendar link for the active booking.",
-        inputSchema: { type: "object", properties: { experienceId: { type: "string" }, date: { type: "string", format: "date" }, provider: { type: "string", enum: ["google", "outlook", "apple"] } }, required: ["provider"] },
-        execute: async (params: any) => {
-          const storageBooking = JSON.parse(localStorage.getItem('webmcp_last_booking') || 'null');
-          const booking = lastBookingRef.current || storageBooking;
+    if (modelContext && typeof modelContext.provideContext === 'function') {
+      const pathParts = location.pathname.split('/');
+      const isProductPage = pathParts.includes('product');
+      const isConfirmationPage = pathParts.includes('confirmation');
+      const productId = isProductPage ? pathParts[pathParts.length - 1] : null;
+      const experience = productId ? dynamicExperiences.find(e => e.id === productId) : null;
 
-          const targetId = params.experienceId || booking?.experienceId;
-          const targetDate = params.date || booking?.date;
-          const targetStartTime = booking?.startTime || "10:00";
-          const targetEndTime = booking?.endTime || "14:00";
-          const targetDesc = booking?.description || "";
-          const targetLoc = booking?.location || "";
-          
-          const exp = dynamicExperiences.find(e => e.id === targetId);
-          if (!exp || !targetDate) return { content: [{ type: "text", text: "I couldn't find your booking details." }] };
-          
-          const title = encodeURIComponent(`AmazingExperiences: ${exp.name}`);
-          const dateOnly = targetDate.replace(/-/g, '');
-          const startT = targetStartTime.replace(':', '');
-          const endT = targetEndTime.replace(':', '');
-          
-          let url = "";
-          if (params.provider === "google") {
-            url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateOnly}T${startT}00/${dateOnly}T${endT}00&details=${encodeURIComponent(targetDesc)}&location=${encodeURIComponent(targetLoc)}`;
-          } else if (params.provider === "outlook") {
-            url = `https://outlook.live.com/calendar/0/deeplink/compose?subject=${title}&startdt=${targetDate}T${targetStartTime}:00&enddt=${targetDate}T${targetEndTime}:00&body=${encodeURIComponent(targetDesc)}&location=${encodeURIComponent(targetLoc)}`;
-          } else {
-            url = `data:text/calendar;charset=utf-8,BEGIN:VCALENDAR%0AVERSION:2.0%0ABEGIN:VEVENT%0ASUMMARY:${title}%0ADTSTART:${dateOnly}T${startT}00%0ADTEND:${dateOnly}T${endT}00%0ALOCATION:${encodeURIComponent(targetLoc)}%0AEND:VEVENT%0AEND:VCALENDAR`;
-          }
-          return { content: [{ type: "text", text: `I've generated your ${params.provider} calendar link: ${url}` }] };
-        }
+      const pageContext = {
+        state: {
+          current_path: location.pathname,
+          active_experience_id: productId,
+          active_experience_name: experience?.name || null,
+          wishlist_count: wishlist.length,
+          last_booking: isConfirmationPage ? lastBooking : null,
+          webmcp_demo_session: true
+        },
+        // CRITICAL: Latest spec requires tools definition in ProvideContextParams
+        tools: webmcpTools.map(t => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema
+        }))
+      };
+
+      try {
+        modelContext.provideContext(pageContext);
+      } catch (e) {
+        console.warn("WebMCP: Context Provision Failed", e);
       }
-    ];
-
-    (window as any).__webmcp_tools = tools;
-
-    if (modelContext) {
-      tools.forEach(t => { try { modelContext.registerTool(t); } catch (e) {} });
-      return () => { tools.forEach(t => { try { modelContext.unregisterTool(t.name); } catch (e) {} }); };
     }
-  }, [dynamicExperiences]); 
+  }, [location.pathname, wishlist.length, dynamicExperiences, lastBooking, webmcpTools]);
+
+  // Handle Session Initialization
+  useEffect(() => {
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      const isPresent = !!(navigator as any).modelContext;
+      if (isPresent) {
+        console.log("%c WebMCP detected: navigator.modelContext is available.", "color: #97b89d; font-weight: bold;");
+      }
+    }
+  }, []);
+
+  const handleProductPageInitiateBooking = (id: string, date: string, partySize: number) => {
+    initiateBooking(id, false, date, partySize);
+  };
+
+  const handleViewDetails = (id: string) => {
+    const exp = dynamicExperiences.find(e => e.id === id);
+    if (exp) {
+      trackEvent('Experiences Item Viewed', { products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, false);
+    }
+  };
+
+  // Authitative Tool Registration
+  useEffect(() => {
+    const modelContext = (navigator as any).modelContext;
+    (window as any).__webmcp_tools = webmcpTools; // Helper for visual verification
+    if (modelContext) {
+      webmcpTools.forEach(t => { try { modelContext.registerTool(t); } catch (e) {} });
+      return () => { webmcpTools.forEach(t => { try { modelContext.unregisterTool(t.name); } catch (e) {} }); };
+    }
+  }, [webmcpTools]); 
 
   return (
     <div className="app-container">
