@@ -11,6 +11,7 @@ To maintain a clean and searchable taxonomy, all data sent to Amplitude must adh
 | :--- | :--- | :--- | :--- |
 | `interaction_source` | String | "Human" \| "AI Agent" | Tracks whether the action was initiated by a human user or an AI agent. |
 | `webmcp_enabled` | Boolean | `true` | Indicates if the browser supports the WebMCP standard during the session. |
+| `browser_agent_present` | Boolean | `true` | Set to true via an `identify` call as soon as any AI agent interaction is detected. |
 
 ---
 
@@ -20,17 +21,17 @@ This event property must be an array of objects, where each object represents a 
 ```
 products: [
     {
-        experience_id: "mel-picnic-001".
+        experience_id: "mel-picnic-001",
         experience_name: "Mystery Picnic: Fitzroy"
     },
     {
-        experience_id: "mel-date-007".
+        experience_id: "mel-date-007",
         experience_name: "Date Night: Laneway Bar Hop"
     }
 ]
 ```
 
-product attributes
+### Product Attributes
 | Property Name | Type | Definition | Events This is Known for |
 | :--- | :--- | :--- | :--- |
 | `experience_id` | String | The ID of the experience | All |

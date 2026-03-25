@@ -1,79 +1,132 @@
-/**
- * WebMCP Tool Definitions: AmazingExperiences Platform
- * 
- * DESIGN PHILOSOPHY:
- * These tools are designed to be "Atomic" and "Deterministic". 
- * They move beyond screen scraping by providing the agent with a clean, 
- * machine-readable contract for every core business logic action.
- */
-{
-  "name": "AmazingExperiences",
-  "version": "2.0.0",
-  "description": "Agent-native interface for discovering and booking unique experiences across Australia.",
-  "tools": [
-    {
-      "name": "search_experiences",
-      "description": "The primary discovery tool. Allows semantic filtering of the product catalog. Agents should use this to find products matching user intent (location, group size, date, or specific interests).",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "location": { "type": "string", "description": "City or region (e.g., 'Melbourne', 'CBD')." },
-          "partySize": { "type": "number", "description": "Number of attendees. Tool filters results by min/max capacity." },
-          "startDate": { "type": "string", "format": "date", "description": "YYYY-MM-DD start of availability window." },
-          "endDate": { "type": "string", "format": "date", "description": "YYYY-MM-DD end of availability window." },
-          "onlyWishlist": { "type": "boolean", "description": "If true, restricts search to items already saved by the user." }
+[
+  {
+    "name": "generate_calendar_url",
+    "description": "Generates a pre-filled calendar link for the active booking.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "experienceId": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "provider": {
+          "type": "string",
+          "enum": [
+            "google",
+            "outlook",
+            "apple"
+          ]
+        }
+      },
+      "required": [
+        "provider"
+      ]
+    }
+  },
+  {
+    "name": "get_availability",
+    "description": "Gets available dates for a specific experience ID.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "experienceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "experienceId"
+      ]
+    }
+  },
+  {
+    "name": "get_experience_details",
+    "description": "Gets full product details for a specific experience ID.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "experienceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "experienceId"
+      ]
+    }
+  },
+  {
+    "name": "get_wishlist",
+    "description": "Retrieves items in the user's wishlist.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  {
+    "name": "initiate_booking",
+    "description": "Starts checkout process for an experience ID. A date MUST be provided.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "experienceId": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "The specific date for the booking."
+        },
+        "partySize": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "experienceId",
+        "date"
+      ]
+    }
+  },
+  {
+    "name": "search_experiences",
+    "description": "Search for experiences based on criteria. Returns matching experiences with their IDs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "type": "string"
+        },
+        "partySize": {
+          "type": "number"
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "endDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "onlyWishlist": {
+          "type": "boolean"
         }
       }
-    },
-    {
-      "name": "get_wishlist",
-      "description": "Context retrieval tool. Returns all experiences the user has previously 'hearted' or saved. Essential for 'Concierge' use cases where the agent recommends based on user history.",
-      "inputSchema": { "type": "object", "properties": {} }
-    },
-    {
-      "name": "toggle_wishlist",
-      "description": "Direct actuation tool. Adds or removes an experience from the user's saved list. Fires a UI notification acknowledging the agent's action to the human user.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "experienceId": { "type": "string", "description": "The unique ID of the product." }
-        },
-        "required": ["experienceId"]
-      }
-    },
-    {
-      "name": "get_availability",
-      "description": "Data verification tool. Returns a raw list of available dates for a specific product. Crucial for ensuring a booking will succeed before leading the user to checkout.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "experienceId": { "type": "string" }
-        },
-        "required": ["experienceId"]
-      }
-    },
-    {
-      "name": "get_experience_details",
-      "description": "Deep-dive tool. Returns full description, star ratings, and inclusions. Use this to help the user choose between multiple options found during a search.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "experienceId": { "type": "string" }
-        },
-        "required": ["experienceId"]
-      }
-    },
-    {
-      "name": "initiate_booking",
-      "description": "The 'Closing' tool. Transitions the application to the Secure Checkout Page. This tool is Human-in-the-Loop (HITL) by design; it prepares the state but requires the human to perform the final payment.",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "experienceId": { "type": "string" },
-          "partySize": { "type": "number", "description": "Number of guests for the final booking summary." }
-        },
-        "required": ["experienceId"]
-      }
     }
-  ]
-}
+  },
+  {
+    "name": "toggle_wishlist",
+    "description": "Adds or removes an experience from the user's saved list.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "experienceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "experienceId"
+      ]
+    }
+  }
+]

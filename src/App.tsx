@@ -105,6 +105,13 @@ function AppContent() {
   }, []);
 
   const trackEvent = (eventName: string, properties: any, isAgent: boolean = false) => {
+    // Set user property if an agent is interacting
+    if (isAgent) {
+      const identifyEvent = new amplitude.Identify();
+      identifyEvent.set('browser_agent_present', true);
+      amplitude.identify(identifyEvent);
+    }
+
     const globalProps = {
       interaction_source: isAgent ? 'AI Agent' : 'Human',
       webmcp_enabled: !!(navigator as any).modelContext,
@@ -116,9 +123,19 @@ function AppContent() {
   const handleWishlistToggle = (id: string, isAgent: boolean = false, sourceOverride?: string) => {
     const exp = dynamicExperiences.find(e => e.id === id);
     if (!exp) return;
+    
+    // Use functional update to manage state accurately
+    setWishlist(current => {
+      const isInWishlist = current.includes(id);
+      const newWishlist = isInWishlist ? current.filter(item => item !== id) : [...current, id];
+      
+      // MOVED EVENT TRACKING OUTSIDE setWishlist to prevent double-firing if React re-runs the function
+      // (React can call the updater function multiple times in StrictMode or during concurrent updates)
+      return newWishlist;
+    });
+
+    // Fire the event ONCE per click/tool call
     const isInWishlist = wishlist.includes(id);
-    const newWishlist = isInWishlist ? wishlist.filter(item => item !== id) : [...wishlist, id];
-    setWishlist(newWishlist);
     const source = isAgent ? 'AI Agent' : (sourceOverride || 'Unknown');
     const eventName = isInWishlist ? 'Experiences Item Removed from Wishlist' : 'Experiences Item Added to Wishlist';
     if (isAgent) setAgentMessage(`${isInWishlist ? 'Removed' : 'Added'} ${exp.name} ${isInWishlist ? 'from' : 'to'} wishlist.`);
@@ -283,25 +300,25 @@ function AppContent() {
     },
     {
       name: "initiate_booking",
-      description: "Starts checkout process for an experience ID.",
-      inputSchema: { type: "object", properties: { experienceId: { type: "string" }, partySize: { type: "number" } }, required: ["experienceId"] },
+      description: "Starts checkout process for an experience ID. A date MUST be provided.",
+      inputSchema: { 
+        type: "object", 
+        properties: { 
+          experienceId: { type: "string" }, 
+          date: { type: "string", format: "date", description: "The specific date for the booking." },
+          partySize: { type: "number" } 
+        }, 
+        required: ["experienceId", "date"] 
+      },
       execute: async (params: any) => {
-        initiateBooking(params.experienceId, true, undefined, params.partySize);
-        return { content: [{ type: "text", text: "Checkout page opened." }] };
+        initiateBooking(params.experienceId, true, params.date, params.partySize);
+        return { content: [{ type: "text", text: "Checkout page opened with selected date." }] };
       }
     },
     {
       name: "generate_calendar_url",
       description: "Generates a pre-filled calendar link for the active booking.",
-      inputSchema: { 
-        type: "object", 
-        properties: { 
-          experienceId: { type: "string" }, 
-          date: { type: "string", format: "date" }, 
-          provider: { type: "string", enum: ["google", "outlook", "apple"] } 
-        }, 
-        required: ["provider"] 
-      },
+      inputSchema: { type: "object", properties: { experienceId: { type: "string" }, date: { type: "string", format: "date" }, provider: { type: "string", enum: ["google", "outlook", "apple"] } }, required: ["provider"] },
       execute: async (params: any) => {
         const storageBooking = JSON.parse(localStorage.getItem('webmcp_last_booking') || 'null');
         const booking = lastBookingRef.current || storageBooking;
