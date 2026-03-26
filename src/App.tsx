@@ -124,17 +124,18 @@ function AppContent() {
     const exp = dynamicExperiences.find(e => e.id === id);
     if (!exp) return;
     
+    // CRITICAL FIX: Use functional update to avoid stale closures during rapid-fire agent tool calls
     setWishlist(current => {
       const isInWishlist = current.includes(id);
       const newWishlist = isInWishlist ? current.filter(item => item !== id) : [...current, id];
+      
+      const source = isAgent ? 'AI Agent' : (sourceOverride || 'Unknown');
+      const eventName = isInWishlist ? 'Experiences Item Removed from Wishlist' : 'Experiences Item Added to Wishlist';
+      if (isAgent) setAgentMessage(`${isInWishlist ? 'Removed' : 'Added'} ${exp.name} ${isInWishlist ? 'from' : 'to'} wishlist.`);
+      trackEvent(eventName, { wishlist_source: source, products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, isAgent);
+      
       return newWishlist;
     });
-
-    const isInWishlist = wishlist.includes(id);
-    const source = isAgent ? 'AI Agent' : (sourceOverride || 'Unknown');
-    const eventName = isInWishlist ? 'Experiences Item Removed from Wishlist' : 'Experiences Item Added to Wishlist';
-    if (isAgent) setAgentMessage(`${isInWishlist ? 'Removed' : 'Added'} ${exp.name} ${isInWishlist ? 'from' : 'to'} wishlist.`);
-    trackEvent(eventName, { wishlist_source: source, products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, isAgent);
   };
 
   const searchExperiences = (newFilters: any, isAgent: boolean = false) => {
@@ -361,11 +362,9 @@ function AppContent() {
           last_booking: isConfirmationPage ? lastBooking : null,
           webmcp_demo_session: true
         },
-        tools: webmcpTools.map(t => ({
-          name: t.name,
-          description: t.description,
-          inputSchema: t.inputSchema
-        }))
+        // CRITICAL: We must provide the full tool definitions INCLUDING 'execute' functions
+        // to satisfy the latest browser and CLI agent requirements.
+        tools: webmcpTools
       };
 
       try {
@@ -403,7 +402,6 @@ function AppContent() {
   // Authitative Tool Registration
   useEffect(() => {
     const modelContext = (navigator as any).modelContext;
-    (window as any).__webmcp_tools = webmcpTools; // Helper for visual verification
     if (modelContext) {
       webmcpTools.forEach(t => { try { modelContext.registerTool(t); } catch (e) {} });
       return () => { webmcpTools.forEach(t => { try { modelContext.unregisterTool(t.name); } catch (e) {} }); };
