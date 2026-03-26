@@ -124,17 +124,12 @@ function AppContent() {
     const exp = dynamicExperiences.find(e => e.id === id);
     if (!exp) return;
     
-    // Use functional update to manage state accurately
     setWishlist(current => {
       const isInWishlist = current.includes(id);
       const newWishlist = isInWishlist ? current.filter(item => item !== id) : [...current, id];
-      
-      // MOVED EVENT TRACKING OUTSIDE setWishlist to prevent double-firing if React re-runs the function
-      // (React can call the updater function multiple times in StrictMode or during concurrent updates)
       return newWishlist;
     });
 
-    // Fire the event ONCE per click/tool call
     const isInWishlist = wishlist.includes(id);
     const source = isAgent ? 'AI Agent' : (sourceOverride || 'Unknown');
     const eventName = isInWishlist ? 'Experiences Item Removed from Wishlist' : 'Experiences Item Added to Wishlist';
@@ -366,7 +361,6 @@ function AppContent() {
           last_booking: isConfirmationPage ? lastBooking : null,
           webmcp_demo_session: true
         },
-        // CRITICAL: Latest spec requires tools definition in ProvideContextParams
         tools: webmcpTools.map(t => ({
           name: t.name,
           description: t.description,
@@ -388,6 +382,8 @@ function AppContent() {
       hasInitialized.current = true;
       const isPresent = !!(navigator as any).modelContext;
       if (isPresent) {
+        // Standardized Handshake Log for Agent Discovery
+        console.log("[WebMCP] Discovery: navigator.modelContext is ready.");
         console.log("%c WebMCP detected: navigator.modelContext is available.", "color: #97b89d; font-weight: bold;");
       }
     }
