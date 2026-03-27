@@ -62,6 +62,7 @@ Triggered when a user or agent filters the experience catalog.
 | :--- | :--- | :--- |
 | `filter_location` | String | "Melbourne" |
 | `filter_party_size` | Number | 4 |
+| `filter_min_rating` | Number | 4.5 |
 | `filter_start_date` | String | "2026-04-04" |
 | `filter_end_date` | String | "2026-04-06" |
 | `results_count` | Integer | 3 |
@@ -90,6 +91,14 @@ Triggered when a user (or agent) removes an item from their wishlist.
 | `wishlist_source` | String | "Card" \| "ProductPage" \| "AI Agent" |
 | `products` | Array | `[{ "experience_id": "exp-1", ... }]` |
 
+### `Experiences Availability Checked`
+Triggered **only** when the `get_availability` agent tool is called.
+
+| Property Name | Type | Example |
+| :--- | :--- | :--- |
+| `experience_id` | String | "syd-picnic-006" |
+| `availability_returned` | Array | `["2026-04-04", "2026-04-05"]` |
+
 ### `Booking Initiated`
 Triggered when a user (or agent) initiates the booking flow for a specific experience.
 
@@ -107,6 +116,15 @@ Triggered upon successful submission of the checkout form.
 | `$revenue` | Number | 150.00 | Required for Amplitude revenue tracking. |
 | `$currency` | String | "AUD" | Required for Amplitude revenue tracking. |
 | `products` | Array | `[{ "experience_id": "exp-1", "experience_name": "...", "party_size": 2, "experience_date": "2026-04-12", "$product_id": "exp-1" }]` | |
+
+### `Calendar URL Generated`
+Triggered when an agent generates a calendar link for a booking.
+
+| Property Name | Type | Example |
+| :--- | :--- | :--- |
+| `experience_id` | String | "exp-1" |
+| `experience_name` | String | "Mystery Picnic: Fitzroy" |
+| `calendar_provider` | String | "google" \| "outlook" \| "apple" |
 
 ---
 
