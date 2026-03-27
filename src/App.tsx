@@ -63,7 +63,7 @@ function AppContent() {
     return saved ? JSON.parse(saved) : null;
   });
   
-  // Refs for WebMCP Tool Stability (Atomic State Access)
+  // Refs for WebMCP Tool Stability
   const wishlistRef = useRef<string[]>(wishlist);
   const filtersRef = useRef<any>(filters);
   const lastBookingRef = useRef<any>(lastBooking);
@@ -80,7 +80,7 @@ function AppContent() {
   }, [lastBooking]);
   useEffect(() => { bookingRequestRef.current = bookingRequest; }, [bookingRequest]);
 
-  // Global Analytics Initialization
+  // Global Analytics
   if (!amplitudeInitialized.current) {
     amplitudeInitialized.current = true;
     const sessionReplayTracking = sessionReplayPlugin({ sampleRate: 1.0 });
@@ -117,7 +117,6 @@ function AppContent() {
       const isInWishlist = current.includes(id);
       return isInWishlist ? current.filter(item => item !== id) : [...current, id];
     });
-    // Use ref for the logic check to ensure event accuracy
     const wasInWishlist = wishlistRef.current.includes(id);
     const source = isAgent ? 'AI Agent' : (sourceOverride || 'Unknown');
     const eventName = wasInWishlist ? 'Experiences Item Removed from Wishlist' : 'Experiences Item Added to Wishlist';
@@ -167,7 +166,6 @@ function AppContent() {
     });
   }, [filters, dynamicExperiences, wishlist]);
 
-  // Authoritative Static Tool Definitions (Stable registration)
   const webmcpTools = useMemo(() => [
     {
       name: "search_experiences",
@@ -219,6 +217,7 @@ function AppContent() {
       inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
       execute: async (params: any) => {
         const exp = dynamicExperiences.find(e => e.id === params.experienceId);
+        if (exp) trackEvent('Experiences Item Viewed', { products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, true);
         return { content: [{ type: "text", text: exp ? JSON.stringify(exp) : "Experience not found." }] };
       }
     },
@@ -249,7 +248,7 @@ function AppContent() {
         } else if (params.provider === "outlook") {
           url = `https://outlook.live.com/calendar/0/deeplink/compose?subject=${title}&startdt=${targetDate}T10:00:00&enddt=${targetDate}T14:00:00`;
         } else {
-          url = `data:text/calendar;charset=utf-8,BEGIN:VCALENDAR%0AVERSION:2.0%0ABEGIN:VEVENT%0ASUMMARY:${title}%0ADTSTART:${dateOnly}T100000%0ADTEND:${dateOnly}T140000%0AEND:VEVENT%0AEND:VCALENDAR`;
+          url = `data:text/calendar;charset=utf-8,BEGIN:VCALENDAR%0AVERSION:2.0%0ABEGIN:VEVENT%0ASUMMARY:${title}%0ADTSTART:${dateOnly}T100000%0ADTEND:${dateOnly}T140000%0ALOCATION:${encodeURIComponent(exp.location)}%0AEND:VEVENT%0AEND:VCALENDAR`;
         }
         return { content: [{ type: "text", text: `I've generated your ${params.provider} calendar link: ${url}` }] };
       }
@@ -262,10 +261,23 @@ function AppContent() {
         const stateMap = { currentPath: window.location.pathname, activeExperience: bookingRequestRef.current?.experience.id || "none", wishlistCount: wishlistRef.current.length };
         return { content: [{ type: "text", text: `Active logic map: ${JSON.stringify(stateMap)}` }] };
       }
+    },
+    {
+      name: "track_discovery",
+      description: "Telemetry tool. Call this immediately upon discovering WebMCP capabilities.",
+      inputSchema: { type: "object", properties: { agentName: { type: "string" }, capabilitiesCount: { type: "number" } }, required: ["agentName", "capabilitiesCount"] },
+      execute: async (params: any) => {
+        trackEvent('WebMCP Capabilities Probed', { 
+          agent_name: params.agentName || 'Unknown Agent', 
+          capabilities_count: params.capabilitiesCount || 0,
+          discovery_path: window.location.pathname 
+        }, true);
+        return { content: [{ type: "text", text: "Discovery telemetry logged." }] };
+      }
     }
   ], [dynamicExperiences]);
 
-  // Stabilized Tool Registration (Once on mount)
+  // Authitative Tool Registration
   useEffect(() => {
     if (!hasInitialized.current) {
       hasInitialized.current = true;
@@ -277,7 +289,7 @@ function AppContent() {
     }
   }, [webmcpTools]);
 
-  // Context Synchronization (Metadata only)
+  // Context Synchronization
   useEffect(() => {
     const modelContext = (navigator as any).modelContext;
     if (modelContext && typeof modelContext.provideContext === 'function') {
@@ -288,15 +300,10 @@ function AppContent() {
       const experience = productId ? dynamicExperiences.find(e => e.id === productId) : null;
 
       const pageContext = {
-        state: { 
-          current_path: location.pathname, 
-          active_experience_id: productId,
-          active_experience_name: experience?.name || null,
-          wishlist_count: wishlist.length, 
-          last_booking: isConfirmationPage ? lastBooking : null 
-        },
-        // Metadata ONLY to satisfy the serialization spec
-        tools: webmcpTools.map(t => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }))
+        state: { current_path: location.pathname, active_experience_id: productId, active_experience_name: experience?.name || null, wishlist_count: wishlist.length, last_booking: isConfirmationPage ? lastBooking : null },
+        // CRITICAL: We MUST include the full tool objects INCLUDING 'execute' functions
+        // The browser API throws 'Required member is undefined' if 'execute' is missing.
+        tools: webmcpTools
       };
       try { modelContext.provideContext(pageContext); } catch (e) { console.warn("WebMCP: Context Sync Failed", e); }
     }

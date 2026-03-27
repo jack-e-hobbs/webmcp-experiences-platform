@@ -46,6 +46,15 @@ products: [
 
 ## Core Events
 
+### `WebMCP Capabilities Probed`
+Triggered immediately upon discovery by an agent. Represents "Discovery Intent."
+
+| Property Name | Type | Example |
+| :--- | :--- | :--- |
+| `agent_name` | String | "Gemini CLI" |
+| `capabilities_count` | Number | 8 |
+| `discovery_path` | String | "/product/mel-picnic-001" |
+
 ### `Experiences Search Submitted`
 Triggered when a user or agent filters the experience catalog.
 
@@ -53,7 +62,6 @@ Triggered when a user or agent filters the experience catalog.
 | :--- | :--- | :--- |
 | `filter_location` | String | "Melbourne" |
 | `filter_party_size` | Number | 4 |
-| `filter_min_rating` | Number | 4.5 |
 | `filter_start_date` | String | "2026-04-04" |
 | `filter_end_date` | String | "2026-04-06" |
 | `results_count` | Integer | 3 |
@@ -82,14 +90,6 @@ Triggered when a user (or agent) removes an item from their wishlist.
 | `wishlist_source` | String | "Card" \| "ProductPage" \| "AI Agent" |
 | `products` | Array | `[{ "experience_id": "exp-1", ... }]` |
 
-### `Experiences Availability Checked`
-Triggered **only** when the `get_availability` agent tool is called.
-
-| Property Name | Type | Example |
-| :--- | :--- | :--- |
-| `experience_id` | String | "syd-picnic-006" |
-| `availability_returned` | Array | `["2026-04-04", "2026-04-05"]` |
-
 ### `Booking Initiated`
 Triggered when a user (or agent) initiates the booking flow for a specific experience.
 
@@ -111,7 +111,7 @@ Triggered upon successful submission of the checkout form.
 ---
 
 ## Automatic Events (Amplitude SDK)
-The following events are captured automatically by the SDK and will include the **Global User Properties** for segmentation:
+The following events are captured automatically by the SDK:
 *   `[Amplitude] Page Viewed`
 *   `[Amplitude] Session Start`
 
