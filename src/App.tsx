@@ -110,6 +110,43 @@ function AppContent() {
     console.log(`[Amplitude] ${eventName}`, { ...globalProps, ...properties });
   };
 
+  const handleSearch = (newFilters: any, isAgent: boolean = false) => {
+    setFilters(newFilters);
+    
+    const matches = dynamicExperiences.filter(exp => {
+        const matchLoc = !newFilters.location || exp.location.toLowerCase().includes(newFilters.location.toLowerCase());
+        const matchParty = !newFilters.partySize || (exp.minPartySize <= newFilters.partySize && exp.maxPartySize >= newFilters.partySize);
+        const matchDate = (() => {
+          if (!newFilters.startDate && !newFilters.endDate) return true;
+          const s = newFilters.startDate ? new Date(newFilters.startDate) : null;
+          const e = newFilters.endDate ? new Date(newFilters.endDate) : null;
+          return exp.availability.some(d => {
+            const c = new Date(d);
+            if (s && c < s) return false;
+            if (e && c > e) return false;
+            return true;
+          });
+        })();
+        return matchLoc && matchParty && matchDate;
+    });
+
+    trackEvent('Experiences Search Submitted', { 
+      filter_location: newFilters.location,
+      filter_party_size: newFilters.partySize,
+      filter_start_date: newFilters.startDate,
+      filter_end_date: newFilters.endDate,
+      results_count: matches.length, 
+      products: matches.map(m => ({ 
+        experience_id: m.id, 
+        experience_name: m.name, 
+        experience_rating: m.starRating, 
+        experience_location: m.location 
+      })) 
+    }, isAgent);
+
+    return matches;
+  };
+
   const handleWishlistToggle = (id: string, isAgent: boolean = false, sourceOverride?: string) => {
     const exp = dynamicExperiences.find(e => e.id === id);
     if (!exp) return;
@@ -167,20 +204,14 @@ function AppContent() {
     });
   }, [filters, dynamicExperiences, wishlist]);
 
-  // Authoritative Static Tool Definitions (Stable registration)
+  // Authitative Executable Tools
   const executableTools = useMemo(() => [
     {
       name: "search_experiences",
       description: "Semantic search. Return matching ID/Name/Price.",
       inputSchema: { type: "object", properties: { location: { type: "string" }, partySize: { type: "number" }, startDate: { type: "string", format: "date" }, endDate: { type: "string", format: "date" }, onlyWishlist: { type: "boolean" } } },
       execute: async (params: any) => {
-        setFilters(params);
-        const matches = dynamicExperiences.filter(exp => {
-          const matchLoc = !params.location || exp.location.toLowerCase().includes(params.location.toLowerCase());
-          const matchParty = !params.partySize || (exp.minPartySize <= params.partySize && exp.maxPartySize >= params.partySize);
-          const matchWish = !params.onlyWishlist || wishlistRef.current.includes(exp.id);
-          return matchLoc && matchParty && matchWish;
-        });
+        const matches = handleSearch(params, true);
         const results = matches.map(m => ({ id: m.id, name: m.name, location: m.location, price: m.price }));
         return { content: [{ type: "text", text: `Found ${matches.length} matches: ${JSON.stringify(results)}` }] };
       }
@@ -192,6 +223,7 @@ function AppContent() {
       execute: async () => {
         const items = dynamicExperiences.filter(e => wishlistRef.current.includes(e.id));
         const enriched = items.map(i => ({ id: i.id, name: i.name }));
+        trackEvent('Wishlist Probed', { products: enriched.map(i => ({ experience_id: i.id, experience_name: i.name })) }, true);
         return { content: [{ type: "text", text: `Wishlist contains: ${JSON.stringify(enriched)}` }] };
       }
     },
@@ -210,6 +242,7 @@ function AppContent() {
       inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
       execute: async (params: any) => {
         const exp = dynamicExperiences.find(e => e.id === params.experienceId);
+        if (exp) trackEvent('Experiences Availability Checked', { experience_id: params.experienceId, availability_returned: exp.availability }, true);
         return { content: [{ type: "text", text: exp ? `Available dates: ${JSON.stringify(exp.availability)}` : "Experience not found." }] };
       }
     },
@@ -269,6 +302,7 @@ function AppContent() {
       inputSchema: { type: "object", properties: {} },
       execute: async () => {
         const stateMap = { currentPath: window.location.pathname, activeExperience: bookingRequestRef.current?.experience.id || "none", wishlistCount: wishlistRef.current.length };
+        trackEvent('WebMCP Capabilities Audited', { discovery_path: window.location.pathname }, true);
         return { content: [{ type: "text", text: `Active logic map: ${JSON.stringify(stateMap)}` }] };
       }
     },
@@ -332,7 +366,7 @@ function AppContent() {
         <Link to="/wishlist" style={{ textDecoration: 'none', color: '#97b89d', fontWeight: 'bold' }}>Wishlist ({wishlist.length})</Link>
       </nav>
       <Routes>
-        <Route path="/" element={<HomePage experiences={filteredExperiences} filters={filters} wishlist={wishlist} onSearch={(params) => setFilters(params)} onWishlist={(id) => handleWishlistToggle(id, false, 'Card')} />} />
+        <Route path="/" element={<HomePage experiences={filteredExperiences} filters={filters} wishlist={wishlist} onSearch={(params) => handleSearch(params, false)} onWishlist={(id) => handleWishlistToggle(id, false, 'Card')} />} />
         <Route path="/wishlist" element={<WishlistPage experiences={dynamicExperiences} wishlist={wishlist} onWishlist={(id) => handleWishlistToggle(id, false, 'WishlistPage')} />} />
         <Route path="/product/:id" element={<ProductPageWrapper experiences={dynamicExperiences} wishlist={wishlist} onView={(id: string) => trackEvent('Experiences Item Viewed', { experience_id: id }, false)} onInitiateBooking={(id: string, date: string, size: number) => initiateBooking(id, false, date, size)} onWishlist={(id: string) => handleWishlistToggle(id, false, 'ProductPage')} />} />
         <Route path="/checkout" element={<CheckoutPage bookingRequest={bookingRequest} onSubmit={handleBookingSubmit} />} />
