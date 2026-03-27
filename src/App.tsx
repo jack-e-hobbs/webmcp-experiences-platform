@@ -63,12 +63,12 @@ function AppContent() {
     return saved ? JSON.parse(saved) : null;
   });
   
-  // Refs for WebMCP Tool Stability
+  // Refs for WebMCP Stability
   const wishlistRef = useRef<string[]>(wishlist);
   const filtersRef = useRef<any>(filters);
   const lastBookingRef = useRef<any>(lastBooking);
   const bookingRequestRef = useRef<any>(bookingRequest);
-  const hasInitialized = useRef(false);
+  const hasRegisteredTools = useRef(false);
   const amplitudeInitialized = useRef(false);
 
   // Sync Refs
@@ -80,7 +80,7 @@ function AppContent() {
   }, [lastBooking]);
   useEffect(() => { bookingRequestRef.current = bookingRequest; }, [bookingRequest]);
 
-  // Global Analytics
+  // Global Analytics Initialization
   if (!amplitudeInitialized.current) {
     amplitudeInitialized.current = true;
     const sessionReplayTracking = sessionReplayPlugin({ sampleRate: 1.0 });
@@ -117,6 +117,7 @@ function AppContent() {
       const isInWishlist = current.includes(id);
       return isInWishlist ? current.filter(item => item !== id) : [...current, id];
     });
+    // Use ref for the logic check to ensure event accuracy
     const wasInWishlist = wishlistRef.current.includes(id);
     const source = isAgent ? 'AI Agent' : (sourceOverride || 'Unknown');
     const eventName = wasInWishlist ? 'Experiences Item Removed from Wishlist' : 'Experiences Item Added to Wishlist';
@@ -166,7 +167,8 @@ function AppContent() {
     });
   }, [filters, dynamicExperiences, wishlist]);
 
-  const webmcpTools = useMemo(() => [
+  // Authoritative Static Tool Definitions (Stable registration)
+  const executableTools = useMemo(() => [
     {
       name: "search_experiences",
       description: "Semantic search. Return matching ID/Name/Price.",
@@ -277,19 +279,19 @@ function AppContent() {
     }
   ], [dynamicExperiences]);
 
-  // Authitative Tool Registration
+  // Authitative Stable Registration
   useEffect(() => {
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
+    if (!hasRegisteredTools.current) {
+      hasRegisteredTools.current = true;
       const modelContext = (navigator as any).modelContext;
       if (modelContext) {
-        webmcpTools.forEach(t => { try { modelContext.registerTool(t); } catch (e) {} });
+        executableTools.forEach(t => { try { modelContext.registerTool(t); } catch (e) {} });
         console.log("[WebMCP] Discovery: navigator.modelContext is ready.");
       }
     }
-  }, [webmcpTools]);
+  }, [executableTools]);
 
-  // Context Synchronization
+  // Metadata Context Synchronization (Metadata ONLY - NO FUNCTIONS)
   useEffect(() => {
     const modelContext = (navigator as any).modelContext;
     if (modelContext && typeof modelContext.provideContext === 'function') {
@@ -300,14 +302,19 @@ function AppContent() {
       const experience = productId ? dynamicExperiences.find(e => e.id === productId) : null;
 
       const pageContext = {
-        state: { current_path: location.pathname, active_experience_id: productId, active_experience_name: experience?.name || null, wishlist_count: wishlist.length, last_booking: isConfirmationPage ? lastBooking : null },
-        // CRITICAL: We MUST include the full tool objects INCLUDING 'execute' functions
-        // The browser API throws 'Required member is undefined' if 'execute' is missing.
-        tools: webmcpTools
+        state: { 
+          current_path: location.pathname, 
+          active_experience_id: productId,
+          active_experience_name: experience?.name || null,
+          wishlist_count: wishlist.length, 
+          last_booking: isConfirmationPage ? lastBooking : null 
+        },
+        // Metadata Manifest: Strips 'execute' to avoid browser TypeErrors
+        tools: executableTools.map(t => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }))
       };
       try { modelContext.provideContext(pageContext); } catch (e) { console.warn("WebMCP: Context Sync Failed", e); }
     }
-  }, [location.pathname, wishlist.length, lastBooking, dynamicExperiences, webmcpTools]);
+  }, [location.pathname, wishlist.length, lastBooking, dynamicExperiences, executableTools]);
 
   return (
     <div className="app-container">
