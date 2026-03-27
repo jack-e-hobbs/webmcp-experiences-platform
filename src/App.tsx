@@ -63,37 +63,32 @@ function AppContent() {
     return saved ? JSON.parse(saved) : null;
   });
   
+  // Refs for WebMCP Tool Stability (Atomic State Access)
+  const wishlistRef = useRef<string[]>(wishlist);
+  const filtersRef = useRef<any>(filters);
+  const lastBookingRef = useRef<any>(lastBooking);
+  const bookingRequestRef = useRef<any>(bookingRequest);
   const hasInitialized = useRef(false);
   const amplitudeInitialized = useRef(false);
-  const wishlistRef = useRef<string[]>(wishlist);
-  const lastBookingRef = useRef<any>(lastBooking); 
-  
-  // 1. One-time Global Analytics Initialization
+
+  // Sync Refs
+  useEffect(() => { wishlistRef.current = wishlist; localStorage.setItem('webmcp_demo_wishlist', JSON.stringify(wishlist)); }, [wishlist]);
+  useEffect(() => { filtersRef.current = filters; }, [filters]);
+  useEffect(() => { 
+    lastBookingRef.current = lastBooking; 
+    if (lastBooking) localStorage.setItem('webmcp_last_booking', JSON.stringify(lastBooking)); 
+  }, [lastBooking]);
+  useEffect(() => { bookingRequestRef.current = bookingRequest; }, [bookingRequest]);
+
+  // Global Analytics Initialization
   if (!amplitudeInitialized.current) {
     amplitudeInitialized.current = true;
     const sessionReplayTracking = sessionReplayPlugin({ sampleRate: 1.0 });
     amplitude.init(AMPLITUDE_API_KEY, undefined, { 
-      defaultTracking: {
-        pageViews: true,
-        sessions: true,
-        formInteractions: false,
-        fileDownloads: false
-      }
+      defaultTracking: { pageViews: true, sessions: true, formInteractions: false, fileDownloads: false }
     });
     amplitude.add(sessionReplayTracking);
   }
-
-  useEffect(() => {
-    wishlistRef.current = wishlist;
-    localStorage.setItem('webmcp_demo_wishlist', JSON.stringify(wishlist));
-  }, [wishlist]);
-
-  useEffect(() => {
-    lastBookingRef.current = lastBooking;
-    if (lastBooking) {
-      localStorage.setItem('webmcp_last_booking', JSON.stringify(lastBooking));
-    }
-  }, [lastBooking]);
 
   const dynamicExperiences = useMemo(() => {
     const futureDates = generateFutureWeekends();
@@ -110,10 +105,7 @@ function AppContent() {
       identifyEvent.set('browser_agent_present', true);
       amplitude.identify(identifyEvent);
     }
-    const globalProps = {
-      interaction_source: isAgent ? 'AI Agent' : 'Human',
-      webmcp_enabled: !!(navigator as any).modelContext,
-    };
+    const globalProps = { interaction_source: isAgent ? 'AI Agent' : 'Human', webmcp_enabled: !!(navigator as any).modelContext };
     amplitude.track(eventName, { ...globalProps, ...properties });
     console.log(`[Amplitude] ${eventName}`, { ...globalProps, ...properties });
   };
@@ -125,47 +117,18 @@ function AppContent() {
       const isInWishlist = current.includes(id);
       return isInWishlist ? current.filter(item => item !== id) : [...current, id];
     });
-    const isInWishlist = wishlist.includes(id);
+    // Use ref for the logic check to ensure event accuracy
+    const wasInWishlist = wishlistRef.current.includes(id);
     const source = isAgent ? 'AI Agent' : (sourceOverride || 'Unknown');
-    const eventName = isInWishlist ? 'Experiences Item Removed from Wishlist' : 'Experiences Item Added to Wishlist';
-    if (isAgent) setAgentMessage(`${isInWishlist ? 'Removed' : 'Added'} ${exp.name} ${isInWishlist ? 'from' : 'to'} wishlist.`);
+    const eventName = wasInWishlist ? 'Experiences Item Removed from Wishlist' : 'Experiences Item Added to Wishlist';
+    if (isAgent) setAgentMessage(`${wasInWishlist ? 'Removed' : 'Added'} ${exp.name} ${wasInWishlist ? 'from' : 'to'} wishlist.`);
     trackEvent(eventName, { wishlist_source: source, products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, isAgent);
-  };
-
-  const searchExperiences = (newFilters: any, isAgent: boolean = false) => {
-    setFilters(newFilters);
-    const matches = dynamicExperiences.filter(exp => {
-        const matchLoc = !newFilters.location || exp.location.toLowerCase().includes(newFilters.location.toLowerCase());
-        const matchParty = !newFilters.partySize || (exp.minPartySize <= newFilters.partySize && exp.maxPartySize >= newFilters.partySize);
-        const matchWish = !newFilters.onlyWishlist || wishlist.includes(exp.id);
-        const matchDate = (() => {
-          if (!newFilters.startDate && !newFilters.endDate) return true;
-          const s = newFilters.startDate ? new Date(newFilters.startDate) : null;
-          const e = newFilters.endDate ? new Date(newFilters.endDate) : null;
-          return exp.availability.some(d => {
-            const c = new Date(d);
-            if (s && c < s) return false;
-            if (e && c > e) return false;
-            return true;
-          });
-        })();
-        return matchLoc && matchParty && matchWish && matchDate;
-    });
-    trackEvent('Experiences Search Submitted', { 
-      filter_location: newFilters.location,
-      filter_party_size: newFilters.partySize,
-      filter_start_date: newFilters.startDate,
-      filter_end_date: newFilters.endDate,
-      results_count: matches.length, 
-      products: matches.map(m => ({ experience_id: m.id, experience_name: m.name, experience_rating: m.starRating, experience_location: m.location })) 
-    }, isAgent);
-    return matches;
   };
 
   const initiateBooking = (id: string, isAgent: boolean = false, date?: string, partySize?: number) => {
     const exp = dynamicExperiences.find(e => e.id === id);
     if (!exp) return;
-    const finalSize = partySize || filters.partySize || exp.minPartySize;
+    const finalSize = partySize || filtersRef.current.partySize || exp.minPartySize;
     setBookingRequest({ experience: exp, date, partySize: finalSize });
     trackEvent('Booking Initiated', { products: [{ experience_id: exp.id, experience_name: exp.name, party_size: finalSize, experience_date: date }] }, isAgent);
     if (isAgent) setAgentMessage(`Starting booking for ${exp.name}...`);
@@ -204,14 +167,21 @@ function AppContent() {
     });
   }, [filters, dynamicExperiences, wishlist]);
 
+  // Authoritative Static Tool Definitions (Stable registration)
   const webmcpTools = useMemo(() => [
     {
       name: "search_experiences",
       description: "Semantic search. Return matching ID/Name/Price.",
       inputSchema: { type: "object", properties: { location: { type: "string" }, partySize: { type: "number" }, startDate: { type: "string", format: "date" }, endDate: { type: "string", format: "date" }, onlyWishlist: { type: "boolean" } } },
       execute: async (params: any) => {
-        const matches = searchExperiences(params, true);
-        const results = matches.map(m => ({ id: m.id, name: m.name, location: m.location, price: m.price, keywords: m.keywords }));
+        setFilters(params);
+        const matches = dynamicExperiences.filter(exp => {
+          const matchLoc = !params.location || exp.location.toLowerCase().includes(params.location.toLowerCase());
+          const matchParty = !params.partySize || (exp.minPartySize <= params.partySize && exp.maxPartySize >= params.partySize);
+          const matchWish = !params.onlyWishlist || wishlistRef.current.includes(exp.id);
+          return matchLoc && matchParty && matchWish;
+        });
+        const results = matches.map(m => ({ id: m.id, name: m.name, location: m.location, price: m.price }));
         return { content: [{ type: "text", text: `Found ${matches.length} matches: ${JSON.stringify(results)}` }] };
       }
     },
@@ -221,7 +191,7 @@ function AppContent() {
       inputSchema: { type: "object", properties: {} },
       execute: async () => {
         const items = dynamicExperiences.filter(e => wishlistRef.current.includes(e.id));
-        const enriched = items.map(i => ({ id: i.id, name: i.name, keywords: i.keywords }));
+        const enriched = items.map(i => ({ id: i.id, name: i.name }));
         return { content: [{ type: "text", text: `Wishlist contains: ${JSON.stringify(enriched)}` }] };
       }
     },
@@ -240,7 +210,6 @@ function AppContent() {
       inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
       execute: async (params: any) => {
         const exp = dynamicExperiences.find(e => e.id === params.experienceId);
-        if (exp) trackEvent('Experiences Availability Checked', { experience_id: params.experienceId, availability_returned: exp.availability }, true);
         return { content: [{ type: "text", text: exp ? `Available dates: ${JSON.stringify(exp.availability)}` : "Experience not found." }] };
       }
     },
@@ -250,7 +219,6 @@ function AppContent() {
       inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
       execute: async (params: any) => {
         const exp = dynamicExperiences.find(e => e.id === params.experienceId);
-        if (exp) trackEvent('Experiences Item Viewed', { products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, true);
         return { content: [{ type: "text", text: exp ? JSON.stringify(exp) : "Experience not found." }] };
       }
     },
@@ -260,7 +228,7 @@ function AppContent() {
       inputSchema: { type: "object", properties: { experienceId: { type: "string" }, date: { type: "string", format: "date" }, partySize: { type: "number" } }, required: ["experienceId", "date"] },
       execute: async (params: any) => {
         initiateBooking(params.experienceId, true, params.date, params.partySize);
-        return { content: [{ type: "text", text: "Checkout page opened with selected date." }] };
+        return { content: [{ type: "text", text: "Checkout page opened." }] };
       }
     },
     {
@@ -268,27 +236,20 @@ function AppContent() {
       description: "Create ICS/Google link. Req: provider.",
       inputSchema: { type: "object", properties: { experienceId: { type: "string" }, date: { type: "string", format: "date" }, provider: { type: "string", enum: ["google", "outlook", "apple"] } }, required: ["provider"] },
       execute: async (params: any) => {
-        const storageBooking = JSON.parse(localStorage.getItem('webmcp_last_booking') || 'null');
-        const booking = lastBookingRef.current || storageBooking;
+        const booking = lastBookingRef.current;
         const targetId = params.experienceId || booking?.experienceId;
         const targetDate = params.date || booking?.date;
-        const targetStartTime = booking?.startTime || "10:00";
-        const targetEndTime = booking?.endTime || "14:00";
-        const targetDesc = booking?.description || "";
-        const targetLoc = booking?.location || "";
         const exp = dynamicExperiences.find(e => e.id === targetId);
         if (!exp || !targetDate) return { content: [{ type: "text", text: "I couldn't find your booking details." }] };
         const title = encodeURIComponent(`AmazingExperiences: ${exp.name}`);
         const dateOnly = targetDate.replace(/-/g, '');
-        const startT = targetStartTime.replace(':', '');
-        const endT = targetEndTime.replace(':', '');
         let url = "";
         if (params.provider === "google") {
-          url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateOnly}T${startT}00/${dateOnly}T${endT}00&details=${encodeURIComponent(targetDesc)}&location=${encodeURIComponent(targetLoc)}`;
+          url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateOnly}T100000/${dateOnly}T140000`;
         } else if (params.provider === "outlook") {
-          url = `https://outlook.live.com/calendar/0/deeplink/compose?subject=${title}&startdt=${targetDate}T${targetStartTime}:00&enddt=${targetDate}T${targetEndTime}:00&body=${encodeURIComponent(targetDesc)}&location=${encodeURIComponent(targetLoc)}`;
+          url = `https://outlook.live.com/calendar/0/deeplink/compose?subject=${title}&startdt=${targetDate}T10:00:00&enddt=${targetDate}T14:00:00`;
         } else {
-          url = `data:text/calendar;charset=utf-8,BEGIN:VCALENDAR%0AVERSION:2.0%0ABEGIN:VEVENT%0ASUMMARY:${title}%0ADTSTART:${dateOnly}T${startT}00%0ADTEND:${dateOnly}T${endT}00%0ALOCATION:${encodeURIComponent(targetLoc)}%0AEND:VEVENT%0AEND:VCALENDAR`;
+          url = `data:text/calendar;charset=utf-8,BEGIN:VCALENDAR%0AVERSION:2.0%0ABEGIN:VEVENT%0ASUMMARY:${title}%0ADTSTART:${dateOnly}T100000%0ADTEND:${dateOnly}T140000%0AEND:VEVENT%0AEND:VCALENDAR`;
         }
         return { content: [{ type: "text", text: `I've generated your ${params.provider} calendar link: ${url}` }] };
       }
@@ -296,13 +257,27 @@ function AppContent() {
     {
       name: "audit_capabilities",
       description: "Self-correction tool. Returns fresh logic map/state.",
+      inputSchema: { type: "object", properties: {} },
       execute: async () => {
-        const stateMap = { currentPath: location.pathname, activeExperience: bookingRequest?.experience.id || "none", wishlistCount: wishlist.length, toolsCount: webmcpTools.length };
+        const stateMap = { currentPath: window.location.pathname, activeExperience: bookingRequestRef.current?.experience.id || "none", wishlistCount: wishlistRef.current.length };
         return { content: [{ type: "text", text: `Active logic map: ${JSON.stringify(stateMap)}` }] };
       }
     }
-  ], [dynamicExperiences, location.pathname, bookingRequest, wishlist.length]);
+  ], [dynamicExperiences]);
 
+  // Stabilized Tool Registration (Once on mount)
+  useEffect(() => {
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      const modelContext = (navigator as any).modelContext;
+      if (modelContext) {
+        webmcpTools.forEach(t => { try { modelContext.registerTool(t); } catch (e) {} });
+        console.log("[WebMCP] Discovery: navigator.modelContext is ready.");
+      }
+    }
+  }, [webmcpTools]);
+
+  // Context Synchronization (Metadata only)
   useEffect(() => {
     const modelContext = (navigator as any).modelContext;
     if (modelContext && typeof modelContext.provideContext === 'function') {
@@ -311,38 +286,21 @@ function AppContent() {
       const isConfirmationPage = pathParts.includes('confirmation');
       const productId = isProductPage ? pathParts[pathParts.length - 1] : null;
       const experience = productId ? dynamicExperiences.find(e => e.id === productId) : null;
+
       const pageContext = {
-        state: { current_path: location.pathname, active_experience_id: productId, active_experience_name: experience?.name || null, wishlist_count: wishlist.length, last_booking: isConfirmationPage ? lastBooking : null, webmcp_demo_session: true },
-        tools: webmcpTools
+        state: { 
+          current_path: location.pathname, 
+          active_experience_id: productId,
+          active_experience_name: experience?.name || null,
+          wishlist_count: wishlist.length, 
+          last_booking: isConfirmationPage ? lastBooking : null 
+        },
+        // Metadata ONLY to satisfy the serialization spec
+        tools: webmcpTools.map(t => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }))
       };
-      try { modelContext.provideContext(pageContext); } catch (e) { console.warn("WebMCP: Context Provision Failed", e); }
+      try { modelContext.provideContext(pageContext); } catch (e) { console.warn("WebMCP: Context Sync Failed", e); }
     }
-  }, [location.pathname, wishlist.length, dynamicExperiences, lastBooking, webmcpTools]);
-
-  useEffect(() => {
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
-      const isPresent = !!(navigator as any).modelContext;
-      if (isPresent) {
-        console.log("[WebMCP] Discovery: navigator.modelContext is ready.");
-        console.log("%c WebMCP detected: navigator.modelContext is available.", "color: #97b89d; font-weight: bold;");
-      }
-    }
-  }, []);
-
-  const handleProductPageInitiateBooking = (id: string, date: string, partySize: number) => { initiateBooking(id, false, date, partySize); };
-  const handleViewDetails = (id: string) => {
-    const exp = dynamicExperiences.find(e => e.id === id);
-    if (exp) { trackEvent('Experiences Item Viewed', { products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, false); }
-  };
-
-  useEffect(() => {
-    const modelContext = (navigator as any).modelContext;
-    if (modelContext) {
-      webmcpTools.forEach(t => { try { modelContext.registerTool(t); } catch (e) {} });
-      return () => { webmcpTools.forEach(t => { try { modelContext.unregisterTool(t.name); } catch (e) {} }); };
-    }
-  }, [webmcpTools]); 
+  }, [location.pathname, wishlist.length, lastBooking, dynamicExperiences, webmcpTools]);
 
   return (
     <div className="app-container">
@@ -352,9 +310,9 @@ function AppContent() {
         <Link to="/wishlist" style={{ textDecoration: 'none', color: '#97b89d', fontWeight: 'bold' }}>Wishlist ({wishlist.length})</Link>
       </nav>
       <Routes>
-        <Route path="/" element={<HomePage experiences={filteredExperiences} filters={filters} wishlist={wishlist} onSearch={searchExperiences} onWishlist={(id) => handleWishlistToggle(id, false, 'Card')} />} />
+        <Route path="/" element={<HomePage experiences={filteredExperiences} filters={filters} wishlist={wishlist} onSearch={(params) => setFilters(params)} onWishlist={(id) => handleWishlistToggle(id, false, 'Card')} />} />
         <Route path="/wishlist" element={<WishlistPage experiences={dynamicExperiences} wishlist={wishlist} onWishlist={(id) => handleWishlistToggle(id, false, 'WishlistPage')} />} />
-        <Route path="/product/:id" element={<ProductPageWrapper experiences={dynamicExperiences} wishlist={wishlist} onView={handleViewDetails} onInitiateBooking={handleProductPageInitiateBooking} onWishlist={(id: string) => handleWishlistToggle(id, false, 'ProductPage')} />} />
+        <Route path="/product/:id" element={<ProductPageWrapper experiences={dynamicExperiences} wishlist={wishlist} onView={(id: string) => trackEvent('Experiences Item Viewed', { experience_id: id }, false)} onInitiateBooking={(id: string, date: string, size: number) => initiateBooking(id, false, date, size)} onWishlist={(id: string) => handleWishlistToggle(id, false, 'ProductPage')} />} />
         <Route path="/checkout" element={<CheckoutPage bookingRequest={bookingRequest} onSubmit={handleBookingSubmit} />} />
         <Route path="/confirmation" element={<ConfirmationPage booking={lastBooking} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
