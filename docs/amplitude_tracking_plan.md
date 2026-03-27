@@ -55,6 +55,20 @@ Triggered immediately upon discovery by an agent. Represents "Discovery Intent."
 | `capabilities_count` | Number | 8 |
 | `discovery_path` | String | "/product/mel-picnic-001" |
 
+### `WebMCP Capabilities Audited`
+Triggered when an agent calls the `audit_capabilities` tool to recover state.
+
+| Property Name | Type | Example |
+| :--- | :--- | :--- |
+| `discovery_path` | String | "/checkout" |
+
+### `Wishlist Probed`
+Triggered when an agent reads the user's saved wishlist items.
+
+| Property Name | Type | Example |
+| :--- | :--- | :--- |
+| `products` | Array | `[{ "experience_id": "exp-1", ... }]` |
+
 ### `Experiences Search Submitted`
 Triggered when a user or agent filters the experience catalog.
 
@@ -62,7 +76,6 @@ Triggered when a user or agent filters the experience catalog.
 | :--- | :--- | :--- |
 | `filter_location` | String | "Melbourne" |
 | `filter_party_size` | Number | 4 |
-| `filter_min_rating` | Number | 4.5 |
 | `filter_start_date` | String | "2026-04-04" |
 | `filter_end_date` | String | "2026-04-06" |
 | `results_count` | Integer | 3 |
@@ -92,7 +105,7 @@ Triggered when a user (or agent) removes an item from their wishlist.
 | `products` | Array | `[{ "experience_id": "exp-1", ... }]` |
 
 ### `Experiences Availability Checked`
-Triggered **only** when the `get_availability` agent tool is called.
+Triggered when the `get_availability` agent tool is called.
 
 | Property Name | Type | Example |
 | :--- | :--- | :--- |
