@@ -242,6 +242,14 @@ function AppContent() {
         const targetDate = params.date || booking?.date;
         const exp = dynamicExperiences.find(e => e.id === targetId);
         if (!exp || !targetDate) return { content: [{ type: "text", text: "I couldn't find your booking details." }] };
+        
+        // Track the interaction
+        trackEvent('Calendar URL Generated', { 
+          experience_id: exp.id, 
+          experience_name: exp.name, 
+          calendar_provider: params.provider 
+        }, true);
+
         const title = encodeURIComponent(`AmazingExperiences: ${exp.name}`);
         const dateOnly = targetDate.replace(/-/g, '');
         let url = "";
