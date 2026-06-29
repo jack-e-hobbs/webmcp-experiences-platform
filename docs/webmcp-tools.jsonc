@@ -1,98 +1,98 @@
 {
-  "description": "WebMCP tool definitions for AmazingExperiences. Canonical spec: ../../skill/webmcp-native-skill/references/webmcp-spec-2026.md.",
+  "description": "WebMCP tool definitions for AmazingExperiences. Canonical spec: ../../skill/webmcp-native-skill/references/webmcp-spec-2026.md. Descriptions mirror the runtime registrations in src/App.tsx.",
   "tools": [
     {
       "name": "search_experiences",
-      "description": "Semantic search. Return matching ID/Name/Price.",
+      "description": "Search the bookable experience catalogue. Filter by location, date range, or party size — all parameters are optional, so omit them all to return everything. Returns id, name, location, and price for each match; use the id with other tools.",
       "readOnlyHint": true,
-      "inputSchema": { 
-        "type": "object", 
-        "properties": { 
-          "location": { "type": "string", "description": "City filter." }, 
-          "partySize": { "type": "number", "description": "Guest count." }, 
-          "startDate": { "type": "string", "format": "date", "description": "Earliest availability." }, 
-          "endDate": { "type": "string", "format": "date", "description": "Latest availability." }, 
-          "onlyWishlist": { "type": "boolean" } 
-        } 
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "location": { "type": "string", "description": "City name to filter by, e.g. 'Melbourne'. Omit to include all cities." },
+          "partySize": { "type": "number", "description": "Number of people the experience must accommodate." },
+          "startDate": { "type": "string", "format": "date", "description": "Earliest acceptable date (YYYY-MM-DD)." },
+          "endDate": { "type": "string", "format": "date", "description": "Latest acceptable date (YYYY-MM-DD)." },
+          "onlyWishlist": { "type": "boolean", "description": "If true, search only within the user's saved wishlist." }
+        }
       },
       "returns": "string (plain text — not the old MCP envelope)"
     },
     {
       "name": "get_wishlist",
-      "description": "List user-saved experience IDs/Names.",
+      "description": "List the experiences the user has saved to their wishlist (id and name for each). Takes no parameters. Call this before toggle_wishlist if you need to know what is already saved.",
       "readOnlyHint": true,
       "inputSchema": { "type": "object", "properties": {} },
       "returns": "string"
     },
     {
       "name": "toggle_wishlist",
-      "description": "Add/Remove experience. Requires ID.",
+      "description": "Add or remove ONE experience from the wishlist. This FLIPS the current state: if the experience is already saved it is removed, otherwise it is added. If the user only wants to add (not remove), call get_wishlist first to check whether it is already there.",
       "readOnlyHint": false,
-      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string" } }, "required": ["experienceId"] },
+      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string", "description": "ID of the experience to toggle, taken from search_experiences results." } }, "required": ["experienceId"] },
       "returns": "string"
     },
     {
       "name": "get_availability",
-      "description": "Fetch YYYY-MM-DD availability list. Requires ID.",
+      "description": "Get the list of available booking dates (each YYYY-MM-DD) for one experience. Use these dates when calling initiate_booking.",
       "readOnlyHint": true,
-      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string" } }, "required": ["experienceId"] },
+      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string", "description": "ID of the experience, taken from search_experiences results." } }, "required": ["experienceId"] },
       "returns": "string"
     },
     {
       "name": "get_experience_details",
-      "description": "Fetch full PDP metadata/inclusions. Requires ID.",
+      "description": "Get full details for one experience — long description, inclusions, star rating, location, price, and session times. Use this before booking to answer questions about what an experience involves.",
       "readOnlyHint": true,
-      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string" } }, "required": ["experienceId"] },
+      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string", "description": "ID of the experience, taken from search_experiences results." } }, "required": ["experienceId"] },
       "returns": "string"
     },
     {
       "name": "initiate_booking",
-      "description": "Enter checkout flow. Requires ID/Date.",
+      "description": "Start the checkout flow for an experience on a chosen date and open the checkout page. This begins a booking but does NOT complete payment — confirmation is a separate step the user takes. Mutating action.",
       "readOnlyHint": false,
-      "inputSchema": { 
-        "type": "object", 
-        "properties": { 
-          "experienceId": { "type": "string" }, 
-          "date": { "type": "string", "format": "date" },
-          "partySize": { "type": "number" } 
-        }, 
-        "required": ["experienceId", "date"] 
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "experienceId": { "type": "string", "description": "ID of the experience to book, from search_experiences results." },
+          "date": { "type": "string", "format": "date", "description": "Booking date (YYYY-MM-DD); should be one returned by get_availability." },
+          "partySize": { "type": "number", "description": "Number of people. Optional; defaults to 2." }
+        },
+        "required": ["experienceId", "date"]
       },
       "returns": "string"
     },
     {
       "name": "generate_calendar_url",
-      "description": "Create ICS/Google link. Req: provider.",
+      "description": "Create an 'add to calendar' link (Google, Outlook, or Apple) for a booked experience. If experienceId and date are omitted, it uses the user's most recent booking — so after initiate_booking you can call this with just the provider.",
       "readOnlyHint": false,
-      "inputSchema": { 
-        "type": "object", 
-        "properties": { 
-          "experienceId": { "type": "string" }, 
-          "date": { "type": "string", "format": "date" }, 
-          "provider": { "type": "string", "enum": ["google", "outlook", "apple"] } 
-        }, 
-        "required": ["provider"] 
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "provider": { "type": "string", "enum": ["google", "outlook", "apple"], "description": "Which calendar to generate the link for." },
+          "experienceId": { "type": "string", "description": "Experience ID. Optional; defaults to the most recent booking." },
+          "date": { "type": "string", "format": "date", "description": "Event date (YYYY-MM-DD). Optional; defaults to the most recent booking." }
+        },
+        "required": ["provider"]
       },
       "returns": "string"
     },
     {
       "name": "audit_capabilities",
-      "description": "Self-correction tool. Returns fresh logic map/state.",
+      "description": "Return the current page state — the active route, the experience currently in focus (if any), and the wishlist count. Call this to re-orient if a previous result looks stale or after the page navigates. Read-only; takes no parameters.",
       "readOnlyHint": true,
       "inputSchema": { "type": "object", "properties": {} },
       "returns": "string"
     },
     {
       "name": "track_discovery",
-      "description": "Telemetry tool. Call this immediately upon discovering WebMCP capabilities.",
+      "description": "Telemetry. Call this once, immediately after you discover this site's WebMCP tools, to log that an agent connected. Report your own name and how many tools you found.",
       "readOnlyHint": true,
-      "inputSchema": { 
-        "type": "object", 
-        "properties": { 
-          "agentName": { "type": "string" }, 
-          "capabilitiesCount": { "type": "number" } 
-        }, 
-        "required": ["agentName", "capabilitiesCount"] 
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "agentName": { "type": "string", "description": "Your agent or client name, e.g. 'Gemini in Chrome' or 'Claude'." },
+          "capabilitiesCount": { "type": "number", "description": "Number of tools you discovered via getTools()." }
+        },
+        "required": ["agentName", "capabilitiesCount"]
       },
       "returns": "string"
     }
