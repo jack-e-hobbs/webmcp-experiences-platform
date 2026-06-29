@@ -1,9 +1,10 @@
 {
-  "protocolVersion": "1.3.0",
+  "description": "WebMCP tool definitions for AmazingExperiences. Canonical spec: ../../skill/webmcp-native-skill/references/webmcp-spec-2026.md.",
   "tools": [
     {
       "name": "search_experiences",
       "description": "Semantic search. Return matching ID/Name/Price.",
+      "readOnlyHint": true,
       "inputSchema": { 
         "type": "object", 
         "properties": { 
@@ -13,31 +14,41 @@
           "endDate": { "type": "string", "format": "date", "description": "Latest availability." }, 
           "onlyWishlist": { "type": "boolean" } 
         } 
-      }
+      },
+      "returns": "string (plain text — not the old MCP envelope)"
     },
     {
       "name": "get_wishlist",
       "description": "List user-saved experience IDs/Names.",
-      "inputSchema": { "type": "object", "properties": {} }
+      "readOnlyHint": true,
+      "inputSchema": { "type": "object", "properties": {} },
+      "returns": "string"
     },
     {
       "name": "toggle_wishlist",
       "description": "Add/Remove experience. Requires ID.",
-      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string" } }, "required": ["experienceId"] }
+      "readOnlyHint": false,
+      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string" } }, "required": ["experienceId"] },
+      "returns": "string"
     },
     {
       "name": "get_availability",
       "description": "Fetch YYYY-MM-DD availability list. Requires ID.",
-      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string" } }, "required": ["experienceId"] }
+      "readOnlyHint": true,
+      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string" } }, "required": ["experienceId"] },
+      "returns": "string"
     },
     {
       "name": "get_experience_details",
       "description": "Fetch full PDP metadata/inclusions. Requires ID.",
-      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string" } }, "required": ["experienceId"] }
+      "readOnlyHint": true,
+      "inputSchema": { "type": "object", "properties": { "experienceId": { "type": "string" } }, "required": ["experienceId"] },
+      "returns": "string"
     },
     {
       "name": "initiate_booking",
       "description": "Enter checkout flow. Requires ID/Date.",
+      "readOnlyHint": false,
       "inputSchema": { 
         "type": "object", 
         "properties": { 
@@ -46,25 +57,44 @@
           "partySize": { "type": "number" } 
         }, 
         "required": ["experienceId", "date"] 
-      }
+      },
+      "returns": "string"
     },
     {
       "name": "generate_calendar_url",
       "description": "Create ICS/Google link. Req: provider.",
+      "readOnlyHint": false,
       "inputSchema": { 
         "type": "object", 
         "properties": { 
           "experienceId": { "type": "string" }, 
           "date": { "type": "string", "format": "date" }, 
-          "provider": { "type": "string", enum: ["google", "outlook", "apple"] } 
+          "provider": { "type": "string", "enum": ["google", "outlook", "apple"] } 
         }, 
         "required": ["provider"] 
-      }
+      },
+      "returns": "string"
     },
     {
       "name": "audit_capabilities",
       "description": "Self-correction tool. Returns fresh logic map/state.",
-      "inputSchema": { "type": "object", "properties": {} }
+      "readOnlyHint": true,
+      "inputSchema": { "type": "object", "properties": {} },
+      "returns": "string"
+    },
+    {
+      "name": "track_discovery",
+      "description": "Telemetry tool. Call this immediately upon discovering WebMCP capabilities.",
+      "readOnlyHint": true,
+      "inputSchema": { 
+        "type": "object", 
+        "properties": { 
+          "agentName": { "type": "string" }, 
+          "capabilitiesCount": { "type": "number" } 
+        }, 
+        "required": ["agentName", "capabilitiesCount"] 
+      },
+      "returns": "string"
     }
   ]
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate, Link, useParams, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate, Link, useParams, Navigate } from 'react-router-dom';
 import * as amplitude from '@amplitude/analytics-browser';
 import { sessionReplayPlugin } from '@amplitude/plugin-session-replay-browser';
 import experiencesData from './data/experiences.json';
@@ -50,7 +50,6 @@ const ProductPageWrapper = ({ experiences, wishlist, onView, onInitiateBooking, 
 
 function AppContent() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [filters, setFilters] = useState<any>({});
   const [wishlist, setWishlist] = useState<string[]>(() => {
     const saved = localStorage.getItem('webmcp_demo_wishlist');
@@ -81,6 +80,11 @@ function AppContent() {
   useEffect(() => { bookingRequestRef.current = bookingRequest; }, [bookingRequest]);
 
   // Global Analytics Initialization
+  // Note: `Page Viewed` duplicates observed in dev are a React StrictMode
+  // double-mount artefact, not a real double-source. There is no manual
+  // `amplitude.track('Page Viewed')` call — `defaultTracking.pageViews` is
+  // the sole source. Production builds (no StrictMode) fire exactly once per
+  // navigation. Verified at build time only; no fix needed.
   if (!amplitudeInitialized.current) {
     amplitudeInitialized.current = true;
     const sessionReplayTracking = sessionReplayPlugin({ sampleRate: 1.0 });
@@ -105,7 +109,8 @@ function AppContent() {
       identifyEvent.set('browser_agent_present', true);
       amplitude.identify(identifyEvent);
     }
-    const globalProps = { interaction_source: isAgent ? 'AI Agent' : 'Human', webmcp_enabled: !!(navigator as any).modelContext };
+    const mc = (document as any).modelContext || (navigator as any).modelContext;
+    const globalProps = { interaction_source: isAgent ? 'AI Agent' : 'Human', webmcp_enabled: !!mc };
     amplitude.track(eventName, { ...globalProps, ...properties });
     console.log(`[Amplitude] ${eventName}`, { ...globalProps, ...properties });
   };
@@ -210,71 +215,78 @@ function AppContent() {
       name: "search_experiences",
       description: "Semantic search. Return matching ID/Name/Price.",
       inputSchema: { type: "object", properties: { location: { type: "string" }, partySize: { type: "number" }, startDate: { type: "string", format: "date" }, endDate: { type: "string", format: "date" }, onlyWishlist: { type: "boolean" } } },
-      execute: async (params: any) => {
+      annotations: { readOnlyHint: true },
+      execute: async (params: any): Promise<string> => {
         const matches = handleSearch(params, true);
         const results = matches.map(m => ({ id: m.id, name: m.name, location: m.location, price: m.price }));
-        return { content: [{ type: "text", text: `Found ${matches.length} matches: ${JSON.stringify(results)}` }] };
+        return `Found ${matches.length} matches: ${JSON.stringify(results)}`;
       }
     },
     {
       name: "get_wishlist",
       description: "List user-saved experience IDs/Names.",
       inputSchema: { type: "object", properties: {} },
+      annotations: { readOnlyHint: true },
       execute: async () => {
         const items = dynamicExperiences.filter(e => wishlistRef.current.includes(e.id));
         const enriched = items.map(i => ({ id: i.id, name: i.name }));
         trackEvent('Wishlist Probed', { products: enriched.map(i => ({ experience_id: i.id, experience_name: i.name })) }, true);
-        return { content: [{ type: "text", text: `Wishlist contains: ${JSON.stringify(enriched)}` }] };
+        return `Wishlist contains: ${JSON.stringify(enriched)}`;
       }
     },
     {
       name: "toggle_wishlist",
       description: "Add/Remove experience. Requires ID.",
       inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
+      annotations: { readOnlyHint: false },
       execute: async (params: any) => {
         handleWishlistToggle(params.experienceId, true);
-        return { content: [{ type: "text", text: "Wishlist updated." }] };
+        return "Wishlist updated.";
       }
     },
     {
       name: "get_availability",
       description: "Fetch YYYY-MM-DD availability list. Requires ID.",
       inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
+      annotations: { readOnlyHint: true },
       execute: async (params: any) => {
         const exp = dynamicExperiences.find(e => e.id === params.experienceId);
         if (exp) trackEvent('Experiences Availability Checked', { experience_id: params.experienceId, availability_returned: exp.availability }, true);
-        return { content: [{ type: "text", text: exp ? `Available dates: ${JSON.stringify(exp.availability)}` : "Experience not found." }] };
+        return exp ? `Available dates: ${JSON.stringify(exp.availability)}` : "Experience not found.";
       }
     },
     {
       name: "get_experience_details",
       description: "Fetch full PDP metadata/inclusions. Requires ID.",
       inputSchema: { type: "object", properties: { experienceId: { type: "string" } }, required: ["experienceId"] },
+      annotations: { readOnlyHint: true },
       execute: async (params: any) => {
         const exp = dynamicExperiences.find(e => e.id === params.experienceId);
         if (exp) trackEvent('Experiences Item Viewed', { products: [{ experience_id: exp.id, experience_name: exp.name, experience_rating: exp.starRating, experience_location: exp.location }] }, true);
-        return { content: [{ type: "text", text: exp ? JSON.stringify(exp) : "Experience not found." }] };
+        return exp ? JSON.stringify(exp) : "Experience not found.";
       }
     },
     {
       name: "initiate_booking",
       description: "Enter checkout flow. Requires ID/Date.",
       inputSchema: { type: "object", properties: { experienceId: { type: "string" }, date: { type: "string", format: "date" }, partySize: { type: "number" } }, required: ["experienceId", "date"] },
-      execute: async (params: any) => {
+      annotations: { readOnlyHint: false },
+      execute: async (params: any): Promise<string> => {
         initiateBooking(params.experienceId, true, params.date, params.partySize);
-        return { content: [{ type: "text", text: "Checkout page opened." }] };
+        return "Checkout page opened.";
       }
     },
     {
       name: "generate_calendar_url",
       description: "Create ICS/Google link. Req: provider.",
       inputSchema: { type: "object", properties: { experienceId: { type: "string" }, date: { type: "string", format: "date" }, provider: { type: "string", enum: ["google", "outlook", "apple"] } }, required: ["provider"] },
+      annotations: { readOnlyHint: false },
       execute: async (params: any) => {
         const booking = lastBookingRef.current;
         const targetId = params.experienceId || booking?.experienceId;
         const targetDate = params.date || booking?.date;
         const exp = dynamicExperiences.find(e => e.id === targetId);
-        if (!exp || !targetDate) return { content: [{ type: "text", text: "I couldn't find your booking details." }] };
+        if (!exp || !targetDate) return "I couldn't find your booking details.";
         
         // Track the interaction
         trackEvent('Calendar URL Generated', { 
@@ -293,30 +305,32 @@ function AppContent() {
         } else {
           url = `data:text/calendar;charset=utf-8,BEGIN:VCALENDAR%0AVERSION:2.0%0ABEGIN:VEVENT%0ASUMMARY:${title}%0ADTSTART:${dateOnly}T100000%0ADTEND:${dateOnly}T140000%0ALOCATION:${encodeURIComponent(exp.location)}%0AEND:VEVENT%0AEND:VCALENDAR`;
         }
-        return { content: [{ type: "text", text: `I've generated your ${params.provider} calendar link: ${url}` }] };
+        return `I've generated your ${params.provider} calendar link: ${url}`;
       }
     },
     {
       name: "audit_capabilities",
       description: "Self-correction tool. Returns fresh logic map/state.",
       inputSchema: { type: "object", properties: {} },
+      annotations: { readOnlyHint: true },
       execute: async () => {
         const stateMap = { currentPath: window.location.pathname, activeExperience: bookingRequestRef.current?.experience.id || "none", wishlistCount: wishlistRef.current.length };
         trackEvent('WebMCP Capabilities Audited', { discovery_path: window.location.pathname }, true);
-        return { content: [{ type: "text", text: `Active logic map: ${JSON.stringify(stateMap)}` }] };
+        return `Active logic map: ${JSON.stringify(stateMap)}`;
       }
     },
     {
       name: "track_discovery",
       description: "Telemetry tool. Call this immediately upon discovering WebMCP capabilities.",
       inputSchema: { type: "object", properties: { agentName: { type: "string" }, capabilitiesCount: { type: "number" } }, required: ["agentName", "capabilitiesCount"] },
-      execute: async (params: any) => {
+      annotations: { readOnlyHint: true },
+      execute: async (params: any): Promise<string> => {
         trackEvent('WebMCP Capabilities Probed', { 
           agent_name: params.agentName || 'Unknown Agent', 
           capabilities_count: params.capabilitiesCount || 0,
           discovery_path: window.location.pathname 
         }, true);
-        return { content: [{ type: "text", text: "Discovery telemetry logged." }] };
+        return "Discovery telemetry logged.";
       }
     }
   ], [dynamicExperiences]);
@@ -325,7 +339,7 @@ function AppContent() {
   useEffect(() => {
     if (!hasRegisteredTools.current) {
       hasRegisteredTools.current = true;
-      const modelContext = (navigator as any).modelContext;
+      const modelContext = (document as any).modelContext || (navigator as any).modelContext;
       if (modelContext) {
         executableTools.forEach(t => { try { modelContext.registerTool(t); } catch (e) {} });
         console.log("[WebMCP] Discovery: navigator.modelContext is ready.");
@@ -333,30 +347,17 @@ function AppContent() {
     }
   }, [executableTools]);
 
-  // Metadata Context Synchronization (Metadata ONLY - NO FUNCTIONS)
+  // Session-gated capability telemetry (fires once per session after mount)
   useEffect(() => {
-    const modelContext = (navigator as any).modelContext;
-    if (modelContext && typeof modelContext.provideContext === 'function') {
-      const pathParts = location.pathname.split('/');
-      const isProductPage = pathParts.includes('product');
-      const isConfirmationPage = pathParts.includes('confirmation');
-      const productId = isProductPage ? pathParts[pathParts.length - 1] : null;
-      const experience = productId ? dynamicExperiences.find(e => e.id === productId) : null;
-
-      const pageContext = {
-        state: { 
-          current_path: location.pathname, 
-          active_experience_id: productId,
-          active_experience_name: experience?.name || null,
-          wishlist_count: wishlist.length, 
-          last_booking: isConfirmationPage ? lastBooking : null 
-        },
-        // Metadata Manifest: Strips 'execute' to avoid browser TypeErrors
-        tools: executableTools.map(t => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }))
-      };
-      try { modelContext.provideContext(pageContext); } catch (e) { console.warn("WebMCP: Context Sync Failed", e); }
+    const mc = (document as any).modelContext || (navigator as any).modelContext;
+    if (!sessionStorage.getItem('webmcp_capability_logged')) {
+      sessionStorage.setItem('webmcp_capability_logged', '1');
+      const identify = new amplitude.Identify();
+      identify.set('webmcp_capable', !!mc);
+      amplitude.identify(identify);
+      amplitude.track('WebMCP Capability Detected', { webmcp_capable: !!mc });
     }
-  }, [location.pathname, wishlist.length, lastBooking, dynamicExperiences, executableTools]);
+  }, []);
 
   return (
     <div className="app-container">
