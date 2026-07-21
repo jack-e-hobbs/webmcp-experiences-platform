@@ -71,3 +71,6 @@ If you are developing without a Canary browser, the app exposes its tool definit
 ```javascript
 console.table(window.__webmcp_tools);
 ```
+---
+
+Built by [Jack Hobbs](https://jackhobbs.dev), digital analytics and martech consultant.
